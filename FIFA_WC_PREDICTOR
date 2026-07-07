@@ -1,1 +1,694 @@
+import React, { useState, useEffect } from 'react';
+import { Trophy, RefreshCw, Star, Heart, Calendar, Compass, ShieldAlert, Award, ChevronUp, ChevronDown, Check, AlertCircle, SlidersHorizontal, ArrowRight, ArrowLeft, Play, Plus, Search, HelpCircle, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// ==========================================
+// 1. TYPES & CONTRACTS
+// ==========================================
+export interface Team {
+  id: string;
+  name: string;
+  code: string;
+  flag: string;
+  primaryColor: string;
+  secondaryColor: string;
+  textColor: string;
+  confederation: string;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  teams: Team[];
+}
+
+export type BracketStageId = 'LOBBY' | 'GROUPS' | 'THIRD_PLACE' | 'R32' | 'R16' | 'QF' | 'SF' | 'FINAL' | 'COMPLETE';
+
+export interface Match {
+  id: string;
+  stage: BracketStageId;
+  home: Team | null;
+  away: Team | null;
+  homeScore?: number;
+  awayScore?: number;
+  winnerId?: string;
+}
+
+export interface PredictionState {
+  currentStage: BracketStageId;
+  groupStandings: Record<string, Team[]>;
+  selectedThirdPlaceIds: string[];
+  r32Matches: Match[];
+  r16Matches: Match[];
+  qfMatches: Match[];
+  sfMatches: Match[];
+  finalMatch: Match | null;
+  championId: string | null;
+}
+
+// ==========================================
+// 2. THE 48 OFFICIAL 2026 WORLD CUP NATIONS
+// ==========================================
+export const TEAMS: Record<string, Team> = {
+  // Group A
+  MEX: { id: 'MEX', name: 'Mexico', code: 'MEX', flag: '🇲🇽', primaryColor: '#006847', secondaryColor: '#CE1126', textColor: '#FFFFFF', confederation: 'CONCACAF' },
+  RSA: { id: 'RSA', name: 'South Africa', code: 'RSA', flag: '🇿🇦', primaryColor: '#007C3F', secondaryColor: '#FCB514', textColor: '#FFFFFF', confederation: 'CAF' },
+  KOR: { id: 'KOR', name: 'South Korea', code: 'KOR', flag: '🇰🇷', primaryColor: '#CD2E3A', secondaryColor: '#0047A0', textColor: '#FFFFFF', confederation: 'AFC' },
+  CZE: { id: 'CZE', name: 'Czechia', code: 'CZE', flag: '🇨🇿', primaryColor: '#11457E', secondaryColor: '#D71920', textColor: '#FFFFFF', confederation: 'UEFA' },
+
+  // Group B
+  CAN: { id: 'CAN', name: 'Canada', code: 'CAN', flag: '🇨🇦', primaryColor: '#FF0000', secondaryColor: '#FFFFFF', textColor: '#FFFFFF', confederation: 'CONCACAF' },
+  BIH: { id: 'BIH', name: 'Bosnia & Herzegovina', code: 'BIH', flag: '🇧🇦', primaryColor: '#002F6C', secondaryColor: '#FEC524', textColor: '#FFFFFF', confederation: 'UEFA' },
+  QAT: { id: 'QAT', name: 'Qatar', code: 'QAT', flag: '🇶🇦', primaryColor: '#8A1538', secondaryColor: '#FFFFFF', textColor: '#FFFFFF', confederation: 'AFC' },
+  SUI: { id: 'SUI', name: 'Switzerland', code: 'SUI', flag: '🇨🇭', primaryColor: '#D52B1E', secondaryColor: '#FFFFFF', textColor: '#FFFFFF', confederation: 'UEFA' },
+
+  // Group C
+  BRA: { id: 'BRA', name: 'Brazil', code: 'BRA', flag: '🇧🇷', primaryColor: '#FEE101', secondaryColor: '#009639', textColor: '#002395', confederation: 'CONMEBOL' },
+  MAR: { id: 'MAR', name: 'Morocco', code: 'MAR', flag: '🇲🇦', primaryColor: '#C1272D', secondaryColor: '#006233', textColor: '#FFFFFF', confederation: 'CAF' },
+  HAI: { id: 'HAI', name: 'Haiti', code: 'HAI', flag: '🇭🇹', primaryColor: '#002060', secondaryColor: '#D21034', textColor: '#FFFFFF', confederation: 'CONCACAF' },
+  SCO: { id: 'SCO', name: 'Scotland', code: 'SCO', flag: '🏴󠁧󠁢󠁳󠁣󠁴󠁿', primaryColor: '#005EB8', secondaryColor: '#FFFFFF', textColor: '#FFFFFF', confederation: 'UEFA' },
+
+  // Group D
+  USA: { id: 'USA', name: 'United States', code: 'USA', flag: '🇺🇸', primaryColor: '#0A1C2A', secondaryColor: '#C8102E', textColor: '#FFFFFF', confederation: 'CONCACAF' },
+  PAR: { id: 'PAR', name: 'Paraguay', code: 'PAR', flag: '🇵🇾', primaryColor: '#D1121A', secondaryColor: '#0038A8', textColor: '#FFFFFF', confederation: 'CONMEBOL' },
+  AUS: { id: 'AUS', name: 'Australia', code: 'AUS', flag: '🇦🇺', primaryColor: '#003831', secondaryColor: '#FEC524', textColor: '#FFFFFF', confederation: 'AFC' },
+  TUR: { id: 'TUR', name: 'Turkey', code: 'TUR', flag: '🇹🇷', primaryColor: '#E30A17', secondaryColor: '#FFFFFF', textColor: '#FFFFFF', confederation: 'UEFA' },
+
+  // Group E
+  GER: { id: 'GER', name: 'Germany', code: 'GER', flag: '🇩🇪', primaryColor: '#111111', secondaryColor: '#FFCC00', textColor: '#FFFFFF', confederation: 'UEFA' },
+  CUW: { id: 'CUW', name: 'Curaçao', code: 'CUW', flag: '🇨🇼', primaryColor: '#002B7F', secondaryColor: '#F9E300', textColor: '#FFFFFF', confederation: 'CONCACAF' },
+  CIV: { id: 'CIV', name: 'Ivory Coast', code: 'CIV', flag: '🇨🇮', primaryColor: '#F77F00', secondaryColor: '#009E60', textColor: '#FFFFFF', confederation: 'CAF' },
+  ECU: { id: 'ECU', name: 'Ecuador', code: 'ECU', flag: '🇪🇨', primaryColor: '#FFDD00', secondaryColor: '#034EA2', textColor: '#000000', confederation: 'CONMEBOL' },
+
+  // Group F
+  NED: { id: 'NED', name: 'Netherlands', code: 'NED', flag: '🇳🇱', primaryColor: '#F36C21', secondaryColor: '#21468B', textColor: '#FFFFFF', confederation: 'UEFA' },
+  JPN: { id: 'JPN', name: 'Japan', code: 'JPN', flag: '🇯🇵', primaryColor: '#002D62', secondaryColor: '#D21034', textColor: '#FFFFFF', confederation: 'AFC' },
+  SWE: { id: 'SWE', name: 'Sweden', code: 'SWE', flag: '🇸🇪', primaryColor: '#005293', secondaryColor: '#FEC904', textColor: '#FFFFFF', confederation: 'UEFA' },
+  TUN: { id: 'TUN', name: 'Tunisia', code: 'TUN', flag: '🇹🇳', primaryColor: '#E2011A', secondaryColor: '#FFFFFF', textColor: '#FFFFFF', confederation: 'CAF' },
+
+  // Group G
+  BEL: { id: 'BEL', name: 'Belgium', code: 'BEL', flag: '🇧🇪', primaryColor: '#E30613', secondaryColor: '#FFF200', textColor: '#FFFFFF', confederation: 'UEFA' },
+  EGY: { id: 'EGY', name: 'Egypt', code: 'EGY', flag: '🇪🇬', primaryColor: '#C0930C', secondaryColor: '#E11C24', textColor: '#FFFFFF', confederation: 'CAF' },
+  IRN: { id: 'IRN', name: 'Iran', code: 'IRN', flag: '🇮🇷', primaryColor: '#239F40', secondaryColor: '#DA121A', textColor: '#FFFFFF', confederation: 'AFC' },
+  NZL: { id: 'NZL', name: 'New Zealand', code: 'NZL', flag: '🇳🇿', primaryColor: '#111111', secondaryColor: '#FFFFFF', textColor: '#FFFFFF', confederation: 'OFC' },
+
+  // Group H
+  ESP: { id: 'ESP', name: 'Spain', code: 'ESP', flag: '🇪🇸', primaryColor: '#C60B1E', secondaryColor: '#FFC400', textColor: '#FFFFFF', confederation: 'UEFA' },
+  CPV: { id: 'CPV', name: 'Cape Verde', code: 'CPV', flag: '🇨🇻', primaryColor: '#003893', secondaryColor: '#D21034', textColor: '#FFFFFF', confederation: 'CAF' },
+  KSA: { id: 'KSA', name: 'Saudi Arabia', code: 'KSA', flag: '🇸🇦', primaryColor: '#006C35', secondaryColor: '#FFFFFF', textColor: '#FFFFFF', confederation: 'AFC' },
+  URU: { id: 'URU', name: 'Uruguay', code: 'URU', flag: '🇺🇾', primaryColor: '#43A1D5', secondaryColor: '#FCD116', textColor: '#FFFFFF', confederation: 'CONMEBOL' },
+
+  // Group I
+  FRA: { id: 'FRA', name: 'France', code: 'FRA', flag: '🇫🇷', primaryColor: '#002395', secondaryColor: '#ED2939', textColor: '#FFFFFF', confederation: 'UEFA' },
+  SEN: { id: 'SEN', name: 'Senegal', code: 'SEN', flag: '🇸🇳', primaryColor: '#00853F', secondaryColor: '#FFF200', textColor: '#FFFFFF', confederation: 'CAF' },
+  IRQ: { id: 'IRQ', name: 'Iraq', code: 'IRQ', flag: '🇮🇶', primaryColor: '#111111', secondaryColor: '#007A3E', textColor: '#FFFFFF', confederation: 'AFC' },
+  NOR: { id: 'NOR', name: 'Norway', code: 'NOR', flag: '🇳🇴', primaryColor: '#BA0C2F', secondaryColor: '#00205B', textColor: '#FFFFFF', confederation: 'UEFA' },
+
+  // Group J
+  ARG: { id: 'ARG', name: 'Argentina', code: 'ARG', flag: '🇦🇷', primaryColor: '#74ACDF', secondaryColor: '#FFFFFF', textColor: '#000000', confederation: 'CONMEBOL' },
+  ALG: { id: 'ALG', name: 'Algeria', code: 'ALG', flag: '🇩🇿', primaryColor: '#006233', secondaryColor: '#D21034', textColor: '#FFFFFF', confederation: 'CAF' },
+  AUT: { id: 'AUT', name: 'Austria', code: 'AUT', flag: '🇦🇹', primaryColor: '#ED2939', secondaryColor: '#FFFFFF', textColor: '#FFFFFF', confederation: 'UEFA' },
+  JOR: { id: 'JOR', name: 'Jordan', code: 'JOR', flag: '🇯🇴', primaryColor: '#CE1126', secondaryColor: '#007A3D', textColor: '#FFFFFF', confederation: 'AFC' },
+
+  // Group K
+  POR: { id: 'POR', name: 'Portugal', code: 'POR', flag: '🇵🇹', primaryColor: '#E42518', secondaryColor: '#00662F', textColor: '#FFFFFF', confederation: 'UEFA' },
+  COD: { id: 'COD', name: 'Congo DR', code: 'COD', flag: '🇨🇩', primaryColor: '#007FFF', secondaryColor: '#CE1126', textColor: '#FFFFFF', confederation: 'CAF' },
+  UZB: { id: 'UZB', name: 'Uzbekistan', code: 'UZB', flag: '🇺🇿', primaryColor: '#0099B8', secondaryColor: '#1EB53A', textColor: '#FFFFFF', confederation: 'AFC' },
+  COL: { id: 'COL', name: 'Colombia', code: 'COL', flag: '🇨🇴', primaryColor: '#FCD116', secondaryColor: '#003893', textColor: '#000000', confederation: 'CONMEBOL' },
+
+  // Group L
+  ENG: { id: 'ENG', name: 'England', code: 'ENG', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', primaryColor: '#FFFFFF', secondaryColor: '#CE1126', textColor: '#000000', confederation: 'UEFA' },
+  CRO: { id: 'CRO', name: 'Croatia', code: 'CRO', flag: '🇭🇷', primaryColor: '#C8102E', secondaryColor: '#004B87', textColor: '#FFFFFF', confederation: 'UEFA' },
+  GHA: { id: 'GHA', name: 'Ghana', code: 'GHA', flag: '🇬🇭', primaryColor: '#FCD116', secondaryColor: '#D21034', textColor: '#FFFFFF', confederation: 'CAF' },
+  PAN: { id: 'PAN', name: 'Panama', code: 'PAN', flag: '🇵🇦', primaryColor: '#005293', secondaryColor: '#D21034', textColor: '#FFFFFF', confederation: 'CONCACAF' },
+};
+
+export const INITIAL_GROUPS: Group[] = [
+  { id: 'A', name: 'Group A', teams: [TEAMS.MEX, TEAMS.RSA, TEAMS.KOR, TEAMS.CZE] },
+  { id: 'B', name: 'Group B', teams: [TEAMS.CAN, TEAMS.BIH, TEAMS.QAT, TEAMS.SUI] },
+  { id: 'C', name: 'Group C', teams: [TEAMS.BRA, TEAMS.MAR, TEAMS.HAI, TEAMS.SCO] },
+  { id: 'D', name: 'Group D', teams: [TEAMS.USA, TEAMS.PAR, TEAMS.AUS, TEAMS.TUR] },
+  { id: 'E', name: 'Group E', teams: [TEAMS.GER, TEAMS.CUW, TEAMS.CIV, TEAMS.ECU] },
+  { id: 'F', name: 'Group F', teams: [TEAMS.NED, TEAMS.JPN, TEAMS.SWE, TEAMS.TUN] },
+  { id: 'G', name: 'Group G', teams: [TEAMS.BEL, TEAMS.EGY, TEAMS.IRN, TEAMS.NZL] },
+  { id: 'H', name: 'Group H', teams: [TEAMS.ESP, TEAMS.CPV, TEAMS.KSA, TEAMS.URU] },
+  { id: 'I', name: 'Group I', teams: [TEAMS.FRA, TEAMS.SEN, TEAMS.IRQ, TEAMS.NOR] },
+  { id: 'J', name: 'Group J', teams: [TEAMS.ARG, TEAMS.ALG, TEAMS.AUT, TEAMS.JOR] },
+  { id: 'K', name: 'Group K', teams: [TEAMS.POR, TEAMS.COD, TEAMS.UZB, TEAMS.COL] },
+  { id: 'L', name: 'Group L', teams: [TEAMS.ENG, TEAMS.CRO, TEAMS.GHA, TEAMS.PAN] },
+];
+
+const LOCAL_STORAGE_KEY = 'vsc_wc_2026_predictor_local_state';
+
+const INITIAL_STATE: PredictionState = {
+  currentStage: 'LOBBY',
+  groupStandings: {
+    A: [...INITIAL_GROUPS[0].teams],
+    B: [...INITIAL_GROUPS[1].teams],
+    C: [...INITIAL_GROUPS[2].teams],
+    D: [...INITIAL_GROUPS[3].teams],
+    E: [...INITIAL_GROUPS[4].teams],
+    F: [...INITIAL_GROUPS[5].teams],
+    G: [...INITIAL_GROUPS[6].teams],
+    H: [...INITIAL_GROUPS[7].teams],
+    I: [...INITIAL_GROUPS[8].teams],
+    J: [...INITIAL_GROUPS[9].teams],
+    K: [...INITIAL_GROUPS[10].teams],
+    L: [...INITIAL_GROUPS[11].teams],
+  },
+  selectedThirdPlaceIds: [],
+  r32Matches: [],
+  r16Matches: [],
+  qfMatches: [],
+  sfMatches: [],
+  finalMatch: null,
+  championId: null,
+};
+
+// ==========================================
+// 3. MAIN COMPONENT EXPORT (VSC SUITE)
+// ==========================================
+export default function WC2026PredictorApp() {
+  const [state, setState] = useState<PredictionState>(INITIAL_STATE);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (saved) {
+      try { setState(JSON.parse(saved)); } catch (e) { console.error(e); }
+    }
+  }, []);
+
+  const saveState = (newState: PredictionState) => {
+    setState(newState);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newState));
+  };
+
+  const handleReset = () => {
+    if (window.confirm('Reset all predictions?')) {
+      saveState(INITIAL_STATE);
+    }
+  };
+
+  const currentStagePercent = () => {
+    switch (state.currentStage) {
+      case 'LOBBY': return 0;
+      case 'GROUPS': return 15;
+      case 'THIRD_PLACE': return 30;
+      case 'R32': return 50;
+      case 'R16': return 65;
+      case 'QF': return 80;
+      case 'SF': return 90;
+      case 'FINAL': return 95;
+      case 'COMPLETE': return 100;
+      default: return 0;
+    }
+  };
+
+  const getThirdPlacedTeams = () => {
+    const ids = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+    return ids.map(id => {
+      const gStand = state.groupStandings[id] || [];
+      const team = gStand[2] || INITIAL_GROUPS.find(g => g.id === id)!.teams[2];
+      return { groupId: id, team };
+    });
+  };
+
+  const handleMoveUp = (groupId: string, index: number) => {
+    if (index === 0) return;
+    const currentTeams = [...state.groupStandings[groupId]];
+    const temp = currentTeams[index];
+    currentTeams[index] = currentTeams[index - 1];
+    currentTeams[index - 1] = temp;
+    saveState({
+      ...state,
+      groupStandings: { ...state.groupStandings, [groupId]: currentTeams }
+    });
+  };
+
+  const handleMoveDown = (groupId: string, index: number) => {
+    const currentTeams = state.groupStandings[groupId];
+    if (index === currentTeams.length - 1) return;
+    const nextTeams = [...currentTeams];
+    const temp = nextTeams[index];
+    nextTeams[index] = nextTeams[index + 1];
+    nextTeams[index + 1] = temp;
+    saveState({
+      ...state,
+      groupStandings: { ...state.groupStandings, [groupId]: nextTeams }
+    });
+  };
+
+  const handleAutoSimulateGroups = () => {
+    const simulated: Record<string, Team[]> = {};
+    INITIAL_GROUPS.forEach(g => {
+      const teams = [...g.teams];
+      for (let i = 0; i < teams.length - 1; i++) {
+        if (Math.random() > 0.6) {
+          const temp = teams[i];
+          teams[i] = teams[i + 1];
+          teams[i + 1] = temp;
+        }
+      }
+      simulated[g.id] = teams;
+    });
+    saveState({ ...state, groupStandings: simulated });
+  };
+
+  const handleToggleThirdPlace = (teamId: string) => {
+    const current = [...state.selectedThirdPlaceIds];
+    const index = current.indexOf(teamId);
+    if (index >= 0) {
+      current.splice(index, 1);
+    } else {
+      if (current.length >= 8) {
+        alert('8 wildcard spots are already selected!');
+        return;
+      }
+      current.push(teamId);
+    }
+    saveState({ ...state, selectedThirdPlaceIds: current });
+  };
+
+  const handleProceedR32 = () => {
+    const standings = state.groupStandings;
+    const w = (gid: string) => standings[gid]?.[0] || INITIAL_GROUPS.find(g => g.id === gid)!.teams[0];
+    const r = (gid: string) => standings[gid]?.[1] || INITIAL_GROUPS.find(g => g.id === gid)!.teams[1];
+    
+    const selectedWildcards: Team[] = [];
+    const thirdPlaced = getThirdPlacedTeams();
+    thirdPlaced.forEach(({ team }) => {
+      if (state.selectedThirdPlaceIds.includes(team.id)) {
+        selectedWildcards.push(team);
+      }
+    });
+
+    while (selectedWildcards.length < 8) {
+      const candidate = thirdPlaced.find(item => !selectedWildcards.includes(item.team));
+      if (!candidate) break;
+      selectedWildcards.push(candidate.team);
+    }
+
+    const matches: Match[] = [
+      { id: 'R32-M1', stage: 'R32', home: w('A'), away: selectedWildcards[0] || null },
+      { id: 'R32-M2', stage: 'R32', home: w('B'), away: r('C') },
+      { id: 'R32-M3', stage: 'R32', home: w('D'), away: selectedWildcards[1] || null },
+      { id: 'R32-M4', stage: 'R32', home: r('A'), away: r('B') },
+      { id: 'R32-M5', stage: 'R32', home: w('E'), away: selectedWildcards[2] || null },
+      { id: 'R32-M6', stage: 'R32', home: w('F'), away: r('D') },
+      { id: 'R32-M7', stage: 'R32', home: w('G'), away: selectedWildcards[3] || null },
+      { id: 'R32-M8', stage: 'R32', home: r('E'), away: r('F') },
+      { id: 'R32-M9', stage: 'R32', home: w('H'), away: selectedWildcards[4] || null },
+      { id: 'R32-M10', stage: 'R32', home: w('I'), away: r('J') },
+      { id: 'R32-M11', stage: 'R32', home: w('J'), away: selectedWildcards[5] || null },
+      { id: 'R32-M12', stage: 'R32', home: r('G'), away: r('H') },
+      { id: 'R32-M13', stage: 'R32', home: w('K'), away: selectedWildcards[6] || null },
+      { id: 'R32-M14', stage: 'R32', home: w('L'), away: r('I') },
+      { id: 'R32-M15', stage: 'R32', home: r('K'), away: r('L') },
+      { id: 'R32-M16', stage: 'R32', home: w('C'), away: selectedWildcards[7] || null },
+    ];
+
+    saveState({
+      ...state,
+      r32Matches: matches,
+      currentStage: 'R32',
+    });
+  };
+
+  const handlePredictWinner = (matchId: string, winnerId: string, homeScore: number, awayScore: number) => {
+    let key: 'r32Matches' | 'r16Matches' | 'qfMatches' | 'sfMatches' | 'finalMatch' = 'r32Matches';
+    if (matchId.startsWith('R32')) key = 'r32Matches';
+    else if (matchId.startsWith('R16')) key = 'r16Matches';
+    else if (matchId.startsWith('QF')) key = 'qfMatches';
+    else if (matchId.startsWith('SF')) key = 'sfMatches';
+    else if (matchId.startsWith('FINAL')) key = 'finalMatch';
+
+    if (key === 'finalMatch') {
+      const match = state.finalMatch;
+      if (!match) return;
+      saveState({ ...state, finalMatch: { ...match, winnerId, homeScore, awayScore } });
+      return;
+    }
+
+    const updated = state[key].map(m => m.id === matchId ? { ...m, winnerId, homeScore, awayScore } : m);
+    saveState({ ...state, [key]: updated } as any);
+  };
+
+  const handleAutoSimulateStage = () => {
+    let key: 'r32Matches' | 'r16Matches' | 'qfMatches' | 'sfMatches' | 'finalMatch' = 'r32Matches';
+    if (state.currentStage === 'R32') key = 'r32Matches';
+    else if (state.currentStage === 'R16') key = 'r16Matches';
+    else if (state.currentStage === 'QF') key = 'qfMatches';
+    else if (state.currentStage === 'SF') key = 'sfMatches';
+    else if (state.currentStage === 'FINAL') key = 'finalMatch';
+
+    if (key === 'finalMatch') {
+      const m = state.finalMatch;
+      if (!m || !m.home || !m.away) return;
+      const h = Math.floor(Math.random() * 3) + 1;
+      let a = Math.floor(Math.random() * 3);
+      if (h === a) a++;
+      saveState({ ...state, finalMatch: { ...m, winnerId: h > a ? m.home.id : m.away.id, homeScore: h, awayScore: a } });
+      return;
+    }
+
+    const updated = state[key].map(m => {
+      if (!m.home || !m.away) return m;
+      const h = Math.floor(Math.random() * 4);
+      let a = Math.floor(Math.random() * 4);
+      if (h === a) a++;
+      return { ...m, winnerId: h > a ? m.home.id : m.away.id, homeScore: h, awayScore: a };
+    });
+    saveState({ ...state, [key]: updated } as any);
+  };
+
+  const handleProceedR16 = () => {
+    const winners = state.r32Matches.map(m => m.winnerId === m.home?.id ? m.home : m.away);
+    const r16: Match[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `R16-M${i + 1}`,
+      stage: 'R16',
+      home: winners[i * 2] || null,
+      away: winners[i * 2 + 1] || null,
+    }));
+    saveState({ ...state, r16Matches: r16, currentStage: 'R16' });
+  };
+
+  const handleProceedQF = () => {
+    const winners = state.r16Matches.map(m => m.winnerId === m.home?.id ? m.home : m.away);
+    const qf: Match[] = Array.from({ length: 4 }, (_, i) => ({
+      id: `QF-M${i + 1}`,
+      stage: 'QF',
+      home: winners[i * 2] || null,
+      away: winners[i * 2 + 1] || null,
+    }));
+    saveState({ ...state, qfMatches: qf, currentStage: 'QF' });
+  };
+
+  const handleProceedSF = () => {
+    const winners = state.qfMatches.map(m => m.winnerId === m.home?.id ? m.home : m.away);
+    const sf: Match[] = Array.from({ length: 2 }, (_, i) => ({
+      id: `SF-M${i + 1}`,
+      stage: 'SF',
+      home: winners[i * 2] || null,
+      away: winners[i * 2 + 1] || null,
+    }));
+    saveState({ ...state, sfMatches: sf, currentStage: 'SF' });
+  };
+
+  const handleProceedFinal = () => {
+    const winners = state.sfMatches.map(m => m.winnerId === m.home?.id ? m.home : m.away);
+    saveState({
+      ...state,
+      finalMatch: { id: 'FINAL-M1', stage: 'FINAL', home: winners[0] || null, away: winners[1] || null },
+      currentStage: 'FINAL',
+    });
+  };
+
+  const handleCrownChampion = () => {
+    if (!state.finalMatch || !state.finalMatch.winnerId) return;
+    saveState({ ...state, championId: state.finalMatch.winnerId, currentStage: 'COMPLETE' });
+  };
+
+  const handleBack = () => {
+    const s = state.currentStage;
+    if (s === 'GROUPS') saveState({ ...state, currentStage: 'LOBBY' });
+    else if (s === 'THIRD_PLACE') saveState({ ...state, currentStage: 'GROUPS' });
+    else if (s === 'R32') saveState({ ...state, currentStage: 'THIRD_PLACE' });
+    else if (s === 'R16') saveState({ ...state, currentStage: 'R32' });
+    else if (s === 'QF') saveState({ ...state, currentStage: 'R16' });
+    else if (s === 'SF') saveState({ ...state, currentStage: 'QF' });
+    else if (s === 'FINAL') saveState({ ...state, currentStage: 'SF' });
+    else if (s === 'COMPLETE') saveState({ ...state, currentStage: 'FINAL' });
+  };
+
+  // Helper formatting helper
+  const isSelectedWildcard = (id: string) => state.selectedThirdPlaceIds.includes(id);
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30">
+      
+      {/* 🚀 Header */}
+      <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur border-b border-slate-800 text-white py-4 px-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gradient-to-tr from-amber-500 to-yellow-400 rounded-lg text-slate-950">
+            <Trophy className="w-5 h-5 animate-pulse" />
+          </div>
+          <div>
+            <h1 className="text-xl font-black bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-400 bg-clip-text text-transparent">
+              FIFA WORLD CUP 2026 PREDICTOR
+            </h1>
+            <p className="text-[10px] text-slate-400 font-mono">VIBRANT ONE-FILE VSC SUITE</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="hidden sm:block text-right">
+            <p className="text-xs font-bold text-slate-200">Stage Percent</p>
+            <span className="text-xs text-teal-400 font-mono font-bold">{currentStagePercent()}% Done</span>
+          </div>
+          {state.currentStage !== 'LOBBY' && (
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-rose-950/30 border border-slate-700 hover:border-rose-900 rounded-md text-xs text-slate-300 hover:text-rose-400 transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>Reset</span>
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* 🔮 Stage Renderers */}
+      <main className="flex-grow max-w-6xl mx-auto w-full px-4 py-8">
+        
+        {/* ==================== LOBBY ==================== */}
+        {state.currentStage === 'LOBBY' && (
+          <div className="text-center py-16 relative">
+            <h2 className="text-5xl sm:text-7xl font-black tracking-tight leading-none mb-6">
+              PREDICT THE <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 via-amber-300 to-rose-400">
+                2026 CHAMPION
+              </span>
+            </h2>
+            <p className="text-slate-300 text-base max-w-xl mx-auto mb-10 leading-relaxed">
+              Expands directly into a vibrant tournament simulator. Rearrange groups A-L based on the actual 48-nation teams, choose the wildcard 3rd places, and select every winner lists.
+            </p>
+            <button
+              onClick={() => saveState({ ...state, currentStage: 'GROUPS' })}
+              className="px-8 py-4 bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-300 text-slate-950 font-black rounded-xl text-lg tracking-wide hover:scale-105 active:scale-95 transition-all flex items-center gap-3.5 mx-auto cursor-pointer"
+            >
+              <Play className="w-5 h-5 fill-slate-950" />
+              ENTER PREDICTOR LEVEL
+            </button>
+          </div>
+        )}
+
+        {/* ==================== GROUP PREDICTOR ==================== */}
+        {state.currentStage === 'GROUPS' && (
+          <div>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/60 border border-slate-850 p-5 rounded-2xl mb-8">
+              <div>
+                <h3 className="text-lg font-bold">Level 1: Arrange Group Standings</h3>
+                <p className="text-xs text-slate-400">Position 1 & 2 advance to matches. Position 3 enters the Wildcard Pool.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={handleAutoSimulateGroups} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg font-bold border border-slate-700 cursor-pointer">
+                  🎲 Simulator All
+                </button>
+                <button onClick={() => saveState({ ...state, selectedThirdPlaceIds: getThirdPlacedTeams().slice(0, 8).map(x => x.team.id), currentStage: 'THIRD_PLACE' })} className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs rounded-lg cursor-pointer flex items-center gap-1">
+                  <span>Wildcard Stage</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {INITIAL_GROUPS.map(group => {
+                const teams = state.groupStandings[group.id] || group.teams;
+                return (
+                  <div key={group.id} className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden p-4">
+                    <span className="text-sm font-black text-teal-400 mb-3 block">{group.name}</span>
+                    <div className="space-y-2">
+                      {teams.map((team, idx) => (
+                        <div 
+                          key={team.id} 
+                          className="flex items-center justify-between p-2 rounded-lg border border-slate-800/80"
+                          style={{ backgroundColor: `${team.primaryColor}12` }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl select-none">{team.flag}</span>
+                            <span className="text-xs font-bold">{team.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button disabled={idx===0} onClick={()=>handleMoveUp(group.id, idx)} className="p-1 rounded bg-slate-800 disabled:opacity-20 text-slate-400 hover:text-white cursor-pointer"><ChevronUp className="w-3 h-3" /></button>
+                            <button disabled={idx===3} onClick={()=>handleMoveDown(group.id, idx)} className="p-1 rounded bg-slate-800 disabled:opacity-20 text-slate-400 hover:text-white cursor-pointer"><ChevronDown className="w-3 h-3" /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== WILDCARDS ==================== */}
+        {state.currentStage === 'THIRD_PLACE' && (
+          <div>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/60 border border-slate-850 p-5 rounded-2xl mb-8">
+              <div>
+                <h3 className="text-lg font-bold">Level 2: Select 8 Wildcards ({state.selectedThirdPlaceIds.length}/8)</h3>
+                <p className="text-xs text-slate-400">Pick the 8 third-placed direct qualifiers that survive to complete the RO32 bracket.</p>
+              </div>
+              <button disabled={state.selectedThirdPlaceIds.length !== 8} onClick={handleProceedR32} className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm rounded-lg disabled:opacity-40 cursor-pointer">
+                Unlock Knockouts ➔
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {getThirdPlacedTeams().map(({ groupId, team }) => {
+                const checked = isSelectedWildcard(team.id);
+                return (
+                  <div
+                    key={team.id}
+                    onClick={() => handleToggleThirdPlace(team.id)}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all ${checked ? 'border-emerald-500 hover:opacity-100' : 'border-slate-800 opacity-60 hover:opacity-100'}`}
+                    style={{ backgroundColor: checked ? `${team.primaryColor}25` : undefined }}
+                  >
+                    <span className="text-[10px] uppercase font-mono block text-slate-400">Group {groupId} (3rd)</span>
+                    <span className="text-2xl my-2 block">{team.flag}</span>
+                    <h4 className="font-bold text-sm truncate">{team.name}</h4>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== BRACKET PREDICTORS ==================== */}
+        {['R32', 'R16', 'QF', 'SF', 'FINAL'].includes(state.currentStage) && (
+          <div>
+            {(() => {
+              let matches: Match[] = [];
+              if (state.currentStage === 'R32') matches = state.r32Matches;
+              else if (state.currentStage === 'R16') matches = state.r16Matches;
+              else if (state.currentStage === 'QF') matches = state.qfMatches;
+              else if (state.currentStage === 'SF') matches = state.sfMatches;
+              else if (state.currentStage === 'FINAL') matches = state.finalMatch ? [state.finalMatch] : [];
+
+              const complete = matches.every(m => m.winnerId && m.home && m.away);
+
+              const handleProceedNext = () => {
+                if (state.currentStage === 'R32') handleProceedR16();
+                else if (state.currentStage === 'R16') handleProceedQF();
+                else if (state.currentStage === 'QF') handleProceedSF();
+                else if (state.currentStage === 'SF') handleProceedFinal();
+                else if (state.currentStage === 'FINAL') handleCrownChampion();
+              };
+
+              return (
+                <div>
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/60 border border-slate-850 p-5 rounded-2xl mb-8">
+                    <div>
+                      <h3 className="text-lg font-bold">Predicting Stage: {state.currentStage}</h3>
+                      <p className="text-xs text-slate-400">Click a country card's checkmark to select the winner, or type scores manually.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button onClick={handleAutoSimulateStage} className="px-3.5 py-2 bg-slate-800 text-xs border border-slate-700/80 hover:bg-slate-700 rounded-lg cursor-pointer">
+                        🎲 Simulate Stage Matches
+                      </button>
+                      <button disabled={!complete} onClick={handleProceedNext} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-lg cursor-pointer">
+                        {state.currentStage === 'FINAL' ? '🏆 Crown Champion' : 'Next Stage ➔'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {matches.map((match, idx) => {
+                      const hSelected = match.winnerId === match.home?.id;
+                      const aSelected = match.winnerId === match.away?.id;
+                      return (
+                        <div key={match.id} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                          <span className="text-[10px] font-mono text-slate-500 uppercase block mb-3">Match {idx+1} ({match.id})</span>
+                          <div className="space-y-3">
+                            
+                            {/* Home */}
+                            {match.home ? (
+                              <div onClick={() => handlePredictWinner(match.id, match.home!.id, 2, 1)} className={`flex items-center justify-between p-3 rounded-xl cursor-pointer border ${hSelected ? 'border-emerald-500' : 'border-slate-800'}`} style={{ backgroundColor: hSelected ? `${match.home.primaryColor}22` : undefined }}>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-2xl">{match.home.flag}</span>
+                                  <span className="text-sm font-bold">{match.home.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center border text-xs ${hSelected ? 'bg-emerald-500 text-slate-950' : 'border-slate-700'}`}>{hSelected && '✓'}</span>
+                                </div>
+                              </div>
+                            ) : <span className="text-xs text-slate-500 block py-2 border-dashed border rounded p-4 text-center">Empty Spot</span>}
+
+                            <div className="text-center text-[10px] text-slate-650 font-bold uppercase font-mono tracking-widest">VS</div>
+
+                            {/* Away */}
+                            {match.away ? (
+                              <div onClick={() => handlePredictWinner(match.id, match.away!.id, 1, 2)} className={`flex items-center justify-between p-3 rounded-xl cursor-pointer border ${aSelected ? 'border-emerald-500' : 'border-slate-800'}`} style={{ backgroundColor: aSelected ? `${match.away.primaryColor}22` : undefined }}>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-2xl">{match.away.flag}</span>
+                                  <span className="text-sm font-bold">{match.away.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center border text-xs ${aSelected ? 'bg-emerald-500 text-slate-950' : 'border-slate-700'}`}>{aSelected && '✓'}</span>
+                                </div>
+                              </div>
+                            ) : <span className="text-xs text-slate-500 block py-2 border-dashed border rounded p-4 text-center">Empty Spot</span>}
+
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* ==================== CELEBRATION ==================== */}
+        {state.currentStage === 'COMPLETE' && state.championId && (
+          <div className="text-center py-10">
+            <span className="text-6xl sm:text-8xl select-none animate-bounce block mb-4">
+              {TEAMS[state.championId]?.flag}
+            </span>
+            <h2 className="text-3xl sm:text-5xl font-black uppercase text-gradient bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-200">
+              {TEAMS[state.championId]?.name} ARE CHAMPIONS!
+            </h2>
+            <p className="text-slate-400 mt-2">Predicted successfully through all levels.</p>
+
+            <button
+              onClick={() => saveState(INITIAL_STATE)}
+              className="mt-8 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-lg text-sm tracking-wide hover:scale-103 cursor-pointer inline-flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>PREDICT DIFFERENT PATHWAY</span>
+            </button>
+          </div>
+        )}
+
+      </main>
+
+      {/* 🌟 Professional Application Developer Credits 🌟 */}
+      <footer className="py-12 border-t border-slate-900 bg-slate-950/70 text-center text-slate-500 text-xs mt-16 leading-relaxed">
+        <div className="inline-flex py-1.5 px-3 bg-slate-900/60 border border-slate-800 rounded-lg text-slate-400 mb-4 items-center">
+          <Heart className="w-3.5 h-3.5 text-rose-500 mr-2.5 fill-rose-500" />
+          <span>Made for football fans anticipating 2026</span>
+        </div>
+        <p className="font-mono">
+          Applet: <strong className="text-slate-300">FIFA World Cup 2026 App Suite</strong>
+          <br />
+          Built with: <strong className="text-emerald-400">React + Framer-Motion + Lucide + Tailwind</strong>
+          <br />
+          Host Container: <strong className="text-slate-400">Google AI Studio Build (Cloud Run Sandbox)</strong>
+        </p>
+      </footer>
+
+    </div>
+  );
+}
 
